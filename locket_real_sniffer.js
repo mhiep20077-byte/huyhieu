@@ -1,8 +1,9 @@
 /**
- * Locket Real Badge Sniffer (Read-Only Passthrough)
- * Chạy trên Shadowrocket (http-request & http-response) cho api.locketcamera.com.
- * - Tự động che toàn bộ Token / Header nhạy cảm trước khi in log.
- * - Format JSON đẹp, tự cắt gọn body > 15.000 ký tự để không tràn log Shadowrocket.
+ * Locket Real Badge Sniffer (Read-Only Passthrough + iOS Notification Preview)
+ * Chạy trên Shadowrocket (http-request & http-response) cho api.locketcamera.com & Cloud Functions.
+ * - Tự động che toàn bộ Token / Header nhạy cảm trước khi in log & hiện thông báo.
+ * - Bắn $notification.post cho các API quan trọng (changeProfileInfo, postMomentV2, getAccountInfo, getMomentOverlayData)
+ *   để xem ngay JSON trực tiếp trên màn hình iPhone mà không cần mở file .db.
  * - 100% Passthrough ($done({})), không làm thay đổi dữ liệu gốc của Locket.
  */
 (function () {
@@ -29,6 +30,8 @@
         "access_token",
         "password"
     ]);
+
+    const NOTIFY_API_RE = /\/(changeProfileInfo|postMoment|getAccountInfo|getMomentOverlayData|getUser)/i;
 
     function maskHeaders(headers) {
         const out = {};
@@ -59,12 +62,13 @@
         return val;
     }
 
-    function formatBody(rawBody) {
+    function formatBody(rawBody, compact) {
         if (rawBody === undefined || rawBody === null || rawBody === "") return "<empty>";
         let text = typeof rawBody === "string" ? rawBody : String(rawBody);
         try {
             const parsed = JSON.parse(text);
-            text = JSON.stringify(deepMaskJson(parsed), null, 2);
+            const masked = deepMaskJson(parsed);
+            text = compact ? JSON.stringify(masked) : JSON.stringify(masked, null, 2);
         } catch (_) {
             // Không phải JSON, giữ nguyên text
         }
@@ -78,22 +82,32 @@
         const req = typeof $request !== "undefined" && $request ? $request : {};
         const url = req.url || "";
         const method = req.method || "GET";
+        const shortPath = url.replace(/^https?:\/\/[^\/]+/i, "").slice(0, 60) || url;
+        const shouldNotify = NOTIFY_API_RE.test(url) && typeof $notification !== "undefined" && $notification && typeof $notification.post === "function";
 
         if (typeof $response === "undefined") {
             const safeHeaders = maskHeaders(req.headers);
-            const bodyText = formatBody(req.body);
+            const bodyText = formatBody(req.body, false);
             console.log(
                 `[REAL-SNIFFER][REQ] ${method} ${url}\n` +
                 `Headers: ${JSON.stringify(safeHeaders, null, 2)}\n` +
                 `Body:\n${bodyText}`
             );
+            if (shouldNotify) {
+                const compact = formatBody(req.body, true).slice(0, 900);
+                $notification.post(`[REQ] ${shortPath}`, method, compact);
+            }
         } else {
             const status = ($response && ($response.status || $response.statusCode)) || 200;
-            const bodyText = formatBody($response ? $response.body : "");
+            const bodyText = formatBody($response ? $response.body : "", false);
             console.log(
                 `[REAL-SNIFFER][RES] ${status} ${url}\n` +
                 `Body:\n${bodyText}`
             );
+            if (shouldNotify) {
+                const compact = formatBody($response ? $response.body : "", true).slice(0, 900);
+                $notification.post(`[RES ${status}] ${shortPath}`, "JSON Response", compact);
+            }
         }
     } catch (err) {
         console.log(`[REAL-SNIFFER][ERR] ${err && err.message ? err.message : String(err)}`);
