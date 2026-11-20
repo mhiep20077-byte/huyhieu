@@ -2,8 +2,8 @@
  * Locket Real Badge Sniffer (Read-Only Passthrough + iOS Notification Preview)
  * Chạy trên Shadowrocket (http-request & http-response) cho api.locketcamera.com & Cloud Functions.
  * - Tự động che toàn bộ Token / Header nhạy cảm trước khi in log & hiện thông báo.
- * - Bắn $notification.post cho các API quan trọng (changeProfileInfo, postMomentV2, getAccountInfo, getMomentOverlayData)
- *   để xem ngay JSON trực tiếp trên màn hình iPhone mà không cần mở file .db.
+ * - Bắn $notification.post cho các API quan trọng (changeProfileInfo, postMomentV2, getAccountInfo, getMomentOverlayData, getUser)
+ *   hoặc mọi JSON response có chứa trường `badge`.
  * - 100% Passthrough ($done({})), không làm thay đổi dữ liệu gốc của Locket.
  */
 (function () {
@@ -62,6 +62,11 @@
         return val;
     }
 
+    function hasBadgeField(rawBody) {
+        if (!rawBody || typeof rawBody !== "string") return false;
+        return /"badge"\s*:/i.test(rawBody);
+    }
+
     function formatBody(rawBody, compact) {
         if (rawBody === undefined || rawBody === null || rawBody === "") return "<empty>";
         let text = typeof rawBody === "string" ? rawBody : String(rawBody);
@@ -83,7 +88,10 @@
         const url = req.url || "";
         const method = req.method || "GET";
         const shortPath = url.replace(/^https?:\/\/[^\/]+/i, "").slice(0, 60) || url;
-        const shouldNotify = NOTIFY_API_RE.test(url) && typeof $notification !== "undefined" && $notification && typeof $notification.post === "function";
+        const hasNotifyFn =
+            typeof $notification !== "undefined" &&
+            $notification &&
+            typeof $notification.post === "function";
 
         if (typeof $response === "undefined") {
             const safeHeaders = maskHeaders(req.headers);
@@ -93,19 +101,20 @@
                 `Headers: ${JSON.stringify(safeHeaders, null, 2)}\n` +
                 `Body:\n${bodyText}`
             );
-            if (shouldNotify) {
+            if (hasNotifyFn && (NOTIFY_API_RE.test(url) || hasBadgeField(req.body))) {
                 const compact = formatBody(req.body, true).slice(0, 900);
                 $notification.post(`[REQ] ${shortPath}`, method, compact);
             }
         } else {
             const status = ($response && ($response.status || $response.statusCode)) || 200;
-            const bodyText = formatBody($response ? $response.body : "", false);
+            const rawResBody = $response ? $response.body : "";
+            const bodyText = formatBody(rawResBody, false);
             console.log(
                 `[REAL-SNIFFER][RES] ${status} ${url}\n` +
                 `Body:\n${bodyText}`
             );
-            if (shouldNotify) {
-                const compact = formatBody($response ? $response.body : "", true).slice(0, 900);
+            if (hasNotifyFn && (NOTIFY_API_RE.test(url) || hasBadgeField(rawResBody))) {
+                const compact = formatBody(rawResBody, true).slice(0, 900);
                 $notification.post(`[RES ${status}] ${shortPath}`, "JSON Response", compact);
             }
         }

@@ -1,18 +1,16 @@
 ﻿#!name=Locket Real Badge Sniffer
-#!desc=Báº¯t gÃ³i tin sáº¡ch api.locketcamera.com & Cloud Functions Ä‘á»ƒ phÃ¢n tÃ­ch cáº¥u trÃºc huy hiá»‡u Real (tá»± áº©n Token, khÃ´ng sá»­a dá»¯ liá»‡u gá»‘c)
+#!desc=Bắt gói tin sạch api.locketcamera.com & Cloud Functions để phân tích cấu trúc huy hiệu (tự ẩn Token, không sửa dữ liệu gốc)
 #!system=ios
 
 [Rule]
-# Ã‰p 2 domain Locket cháº¡y TCP thay vÃ¬ QUIC/UDP Ä‘á»ƒ MITM báº¯t trá»n gÃ³i tin
+# Ép 2 domain Locket chạy TCP thay vì QUIC/UDP để MITM bắt trọn gói tin
 AND,((DOMAIN-SUFFIX,locketcamera.com),(PROTOCOL,UDP)),REJECT
 AND,((DOMAIN,us-central1-locket-4252a.cloudfunctions.net),(PROTOCOL,UDP)),REJECT
 
 [Header Rewrite]
-# XÃ³a ETag Ä‘á»ƒ server luÃ´n tráº£ Ä‘á»§ JSON 200 thay vÃ¬ 304 Not Modified rá»—ng
-^https?:\/\/(api\.locketcamera\.com|us-central1-locket-4252a\.cloudfunctions\.net)\/.+ header-del if-none-match
-^https?:\/\/(api\.locketcamera\.com|us-central1-locket-4252a\.cloudfunctions\.net)\/.+ header-del If-None-Match
-^https?:\/\/(api\.locketcamera\.com|us-central1-locket-4252a\.cloudfunctions\.net)\/.+ header-del if-modified-since
-^https?:\/\/(api\.locketcamera\.com|us-central1-locket-4252a\.cloudfunctions\.net)\/.+ header-del If-Modified-Since
+# Xóa ETag để server luôn trả đủ JSON 200 thay vì 304 Not Modified rỗng
+^https?:\/\/(api\.locketcamera\.com|us-central1-locket-4252a\.cloudfunctions.net)\/ header-del if-none-match
+^https?:\/\/(api\.locketcamera\.com|us-central1-locket-4252a\.cloudfunctions.net)\/ header-del if-modified-since
 
 [Script]
 Locket_Real_Req_Sniffer = type=http-request,pattern=^https:\/\/(api\.locketcamera\.com|us-central1-locket-4252a\.cloudfunctions\.net)\/(?!generateFilteredImage),requires-body=1,max-size=-1,timeout=30,script-update-interval=0,script-path=https://raw.githubusercontent.com/mhiep20077-byte/huyhieu/main/locket_real_sniffer.js
